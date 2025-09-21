@@ -1,22 +1,13 @@
-import tomllib
+import logging
+from pathlib import Path
 from qbittorrentapi import Client
+from helpers import loadQBConfig
 
-CONFIG_FILE = "config/config.toml"
-
-def loadConfig() -> tuple[str, int, str, str]:
-    with open(CONFIG_FILE, "rb") as f:
-        config = tomllib.load(f)
-        qbHost = config["qbittorrent"]["host"]
-        qbPort = config["qbittorrent"]["port"]
-        qbUser = config["qbittorrent"]["username"]
-        qbPass = config["qbittorrent"]["password"]
-        if not qbHost or not qbPort or not qbUser or not qbPass:
-            raise ValueError("Invalid or missing qBittorrent configuration in config.toml")
-        return qbHost, qbPort, qbUser, qbPass
+SAVE_PATH = Path("E:/Downloads") / "Light Novels"
 
 class QBHandler():
     def __init__(self):
-        qbHost, qbPort, qbUser, qbPass = loadConfig()
+        qbHost, qbPort, qbUser, qbPass = loadQBConfig()
         self.qb = Client(
                 host=qbHost,
                 port=qbPort,
@@ -25,5 +16,5 @@ class QBHandler():
             )
     
     def addToQB(self, magnet_url: str, title: str):
-        print(f"  → Adding to qBittorrent: {title}")
-        self.qb.torrents_add(urls=magnet_url)
+        logging.info(f"Adding to qBittorrent: {title}")
+        self.qb.torrents_add(urls=magnet_url, save_path=str(SAVE_PATH))

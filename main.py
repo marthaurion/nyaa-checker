@@ -1,9 +1,12 @@
 import sys
 import argparse
+import logging
 import requests
 from bs4 import BeautifulSoup
+from pathlib import Path
 from lnTracker import LNTracker
 from torrentHandler import QBHandler
+from helpers import getNyaaStartPage
 
 # -------------------
 # CONFIG
@@ -11,16 +14,17 @@ from torrentHandler import QBHandler
 SEARCH_URL = "https://nyaa.si/"
 CATEGORY = "3_1" # English-Translated Light Novels
 
-KEYWORDS = ["[Yen Press]", "[J-Novel Club]", "[Seven Seas]", "[Kobo]", "[Kindle]", "[Kadokawa]"]
-MAX_PAGES = 5
+KEYWORDS = ["[Yen Press]", "[J-Novel Club]", "[Seven Seas]", "[Kobo]", "[Kindle]", "[Kadokawa]", "[Cross Infinite World]"]
+INCREMENTAL_PAGES = 3
+MAX_PAGES = 20
 
 def scrapeSinglePage(page: int) -> list[tuple[str, str, str]]:
     url = SEARCH_URL + f"?c={CATEGORY}" + f"&p={page}"
-    print(f"Scraping page {page}: {url}")
+    logging.info(f"Scraping page {page}: {url}")
     resp = requests.get(url, timeout=15)
     if resp.status_code != 200:
-        print(f"Failed to fetch page {page}, status code: {resp.status_code}")
-        print(resp.text)
+        logging.error(f"Failed to fetch page {page}, status code: {resp.status_code}")
+        logging.error(resp.text)
         return []
 
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -29,7 +33,7 @@ def scrapeSinglePage(page: int) -> list[tuple[str, str, str]]:
     results = []
     for row in rows:
         # Title is in column 2
-        titleElem = row.select_one("td:nth-of-type(2) a")
+        titleElem = row.select_one("td:nth-of-type(2) a:not(.comments)")
         if not titleElem:
             continue
         title = str(titleElem.text).strip()
@@ -49,8 +53,12 @@ def scrapeSinglePage(page: int) -> list[tuple[str, str, str]]:
 def scrapePages(max_pages: int = MAX_PAGES):
     qb = QBHandler()
     tracker = LNTracker()
+    logPath = Path("logs") / "output.log"
+    logPath.parent.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(filename=logPath, filemode="w", level=logging.INFO)
+    startPage = getNyaaStartPage()
 
-    for page in range(1, max_pages + 1):
+    for page in range(startPage, max_pages + 1):
         results = scrapeSinglePage(page)
         if not results:
             break
@@ -60,10 +68,10 @@ def scrapePages(max_pages: int = MAX_PAGES):
                 continue
             if not any(keyword.lower() in title.lower() for keyword in KEYWORDS):
                 continue
-
-            print(f"{title}\n{torrentID}\n{magnet}")
-            #qb.addToQB(magnet, title)
-            #tracker.markSeen(torrentID)
+            
+            logging.info(f"{title}\n{torrentID}\n{magnet}\n")
+            qb.addToQB(magnet, title)
+            tracker.markSeen(torrentID, title)
 
 
 # -------------------
@@ -87,7 +95,7 @@ def main():
     args = parser.parse_args()
 
     if args.mode == "incremental" or len(sys.argv) == 1:
-        scrapePages(max_pages=1)
+        scrapePages(max_pages=INCREMENTAL_PAGES)
     elif args.mode == "historical":
         scrapePages(max_pages=args.pages)
 
